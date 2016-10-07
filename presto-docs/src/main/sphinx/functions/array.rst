@@ -29,6 +29,10 @@ Array Functions
 
     Returns an array of the elements in the intersection of ``x`` and ``y``, without duplicates.
 
+.. function:: array_union(x, y) -> array
+
+    Returns an array of the elements in the union of ``x`` and ``y``, without duplicates.
+
 .. function:: array_join(x, delimiter, null_replacement) -> varchar
 
     Concatenates the elements of the given array using the delimiter and an optional string to replace nulls.
@@ -52,6 +56,7 @@ Array Functions
 .. function:: array_sort(x) -> array
 
     Sorts and returns the array ``x``. The elements of ``x`` must be orderable.
+    Null elements will be placed at the end of the returned array.
 
 .. function:: cardinality(x) -> bigint
 
@@ -95,6 +100,10 @@ Array Functions
 
     Generate a sequence of timestamps from ``start`` to ``stop``, incrementing by ``step``.
     The type of ``step`` can be either ``INTERVAL DAY TO SECOND`` or ``INTERVAL YEAR TO MONTH``.
+
+.. function:: shuffle(x) -> array
+
+    Generate a random permutation of the given array ``x``.
 
 .. function:: slice(x, start, length) -> array
 

@@ -173,9 +173,12 @@ public final class BytecodeUtils
             checkArgument(instance.isPresent());
         }
 
-        int index = 0;
+        int currentParameterIndex = 0;
+        int realParameterIndex = 0;
         boolean boundInstance = false;
-        for (Class<?> type : methodType.parameterArray()) {
+        while (currentParameterIndex < methodType.parameterArray().length) {
+            //for (Class<?> type : methodType.parameterArray()) {
+            Class<?> type = methodType.parameterArray()[currentParameterIndex];
             stackTypes.add(type);
             if (function.getInstanceFactory().isPresent() && !boundInstance) {
                 checkState(type.equals(function.getInstanceFactory().get().type().returnType()), "Mismatched type for instance parameter");
@@ -186,17 +189,24 @@ public final class BytecodeUtils
                 block.append(scope.getVariable("session"));
             }
             else {
-                block.append(arguments.get(index));
-                if (!function.getNullableArguments().get(index)) {
+                block.append(arguments.get(realParameterIndex));
+                if (!function.getNullableArguments().get(realParameterIndex)) {
                     checkArgument(!Primitives.isWrapperType(type), "Non-nullable argument must not be primitive wrapper type");
                     block.append(ifWasNullPopAndGoto(scope, end, unboxedReturnType, Lists.reverse(stackTypes)));
                 }
                 else {
-                    block.append(boxPrimitiveIfNecessary(scope, type));
+                    if (function.getNullFlags().get(realParameterIndex)) {
+                        block.append(scope.getVariable("wasNull"));
+                        currentParameterIndex++;
+                    }
+                    else {
+                        block.append(boxPrimitiveIfNecessary(scope, type));
+                    }
                     block.append(scope.getVariable("wasNull").set(constantFalse()));
                 }
-                index++;
+                realParameterIndex++;
             }
+            currentParameterIndex++;
         }
         block.append(invoke(binding, name));
 
@@ -243,6 +253,7 @@ public final class BytecodeUtils
 
     public static BytecodeNode boxPrimitiveIfNecessary(Scope scope, Class<?> type)
     {
+        checkArgument(!type.isPrimitive(), "cannot box into primitive type");
         if (!Primitives.isWrapperType(type)) {
             return NOP;
         }

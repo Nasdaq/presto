@@ -25,14 +25,17 @@ public class ThriftHiveMetastoreStats
     private final HiveMetastoreApiStats getTable = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats getPartitionNames = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats getPartitionNamesPs = new HiveMetastoreApiStats();
-    private final HiveMetastoreApiStats getPartitionByName = new HiveMetastoreApiStats();
+    private final HiveMetastoreApiStats getPartition = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats getPartitionsByNames = new HiveMetastoreApiStats();
+    private final HiveMetastoreApiStats createDatabase = new HiveMetastoreApiStats();
+    private final HiveMetastoreApiStats dropDatabase = new HiveMetastoreApiStats();
+    private final HiveMetastoreApiStats alterDatabase = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats createTable = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats dropTable = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats alterTable = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats addPartitions = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats dropPartition = new HiveMetastoreApiStats();
-    private final HiveMetastoreApiStats dropPartitionByName = new HiveMetastoreApiStats();
+    private final HiveMetastoreApiStats alterPartition = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats loadRoles = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats getPrivilegeSet = new HiveMetastoreApiStats();
     private final HiveMetastoreApiStats grantTablePrivileges = new HiveMetastoreApiStats();
@@ -61,7 +64,7 @@ public class ThriftHiveMetastoreStats
 
     @Managed
     @Nested
-    public HiveMetastoreApiStats getAllViews()
+    public HiveMetastoreApiStats getGetAllViews()
     {
         return getAllViews;
     }
@@ -89,9 +92,9 @@ public class ThriftHiveMetastoreStats
 
     @Managed
     @Nested
-    public HiveMetastoreApiStats getGetPartitionByName()
+    public HiveMetastoreApiStats getGetPartition()
     {
-        return getPartitionByName;
+        return getPartition;
     }
 
     @Managed
@@ -99,6 +102,27 @@ public class ThriftHiveMetastoreStats
     public HiveMetastoreApiStats getGetPartitionsByNames()
     {
         return getPartitionsByNames;
+    }
+
+    @Managed
+    @Nested
+    public HiveMetastoreApiStats getCreateDatabase()
+    {
+        return createDatabase;
+    }
+
+    @Managed
+    @Nested
+    public HiveMetastoreApiStats getDropDatabase()
+    {
+        return dropDatabase;
+    }
+
+    @Managed
+    @Nested
+    public HiveMetastoreApiStats getAlterDatabase()
+    {
+        return alterDatabase;
     }
 
     @Managed
@@ -138,9 +162,9 @@ public class ThriftHiveMetastoreStats
 
     @Managed
     @Nested
-    public HiveMetastoreApiStats getDropPartitionByName()
+    public HiveMetastoreApiStats getAlterPartition()
     {
-        return dropPartitionByName;
+        return alterPartition;
     }
 
     @Managed

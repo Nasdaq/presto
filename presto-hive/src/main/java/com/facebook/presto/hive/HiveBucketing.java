@@ -45,7 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.facebook.presto.hive.HiveUtil.getNonPartitionKeyColumnHandles;
+import static com.facebook.presto.hive.HiveUtil.getRegularColumnHandles;
 import static com.facebook.presto.hive.HiveUtil.getTableStructFields;
 import static com.facebook.presto.hive.util.Types.checkType;
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -126,7 +126,7 @@ final class HiveBucketing
                         long bigintValue = prestoType.getLong(block, position);
                         return (int) ((bigintValue >>> 32) ^ bigintValue);
                     case FLOAT:
-                        return Float.floatToIntBits((float) prestoType.getDouble(block, position));
+                        return (int) prestoType.getLong(block, position);
                     case DOUBLE:
                         long doubleValue = doubleToLongBits(prestoType.getDouble(block, position));
                         return (int) ((doubleValue >>> 32) ^ doubleValue);
@@ -189,7 +189,7 @@ final class HiveBucketing
             return Optional.empty();
         }
 
-        Map<String, HiveColumnHandle> map = getNonPartitionKeyColumnHandles(connectorId, table).stream()
+        Map<String, HiveColumnHandle> map = getRegularColumnHandles(connectorId, table).stream()
                 .collect(Collectors.toMap(HiveColumnHandle::getName, identity()));
 
         List<HiveColumnHandle> bucketColumns = hiveBucketProperty.get().getBucketedBy().stream()

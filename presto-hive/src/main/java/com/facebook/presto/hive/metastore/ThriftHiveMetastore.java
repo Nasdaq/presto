@@ -15,7 +15,10 @@ package com.facebook.presto.hive.metastore;
 
 import com.facebook.presto.hive.HiveCluster;
 import com.facebook.presto.hive.HiveViewNotSupportedException;
+import com.facebook.presto.hive.PartitionAlreadyExistsException;
+import com.facebook.presto.hive.PartitionNotFoundException;
 import com.facebook.presto.hive.RetryDriver;
+import com.facebook.presto.hive.SchemaAlreadyExistsException;
 import com.facebook.presto.hive.TableAlreadyExistsException;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaNotFoundException;
@@ -60,7 +63,7 @@ import java.util.function.Function;
 import static com.facebook.presto.hive.HiveErrorCode.HIVE_METASTORE_ERROR;
 import static com.facebook.presto.hive.HiveUtil.PRESTO_VIEW_FLAG;
 import static com.facebook.presto.hive.metastore.HivePrivilegeInfo.HivePrivilege.OWNERSHIP;
-import static com.facebook.presto.hive.metastore.HivePrivilegeInfo.parsePrivilege;
+import static com.facebook.presto.hive.metastore.MetastoreUtil.toGrants;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -215,7 +218,7 @@ public class ThriftHiveMetastore
             return retry()
                     .stopOn(UnknownDBException.class)
                     .stopOnIllegalExceptions()
-                    .run("getAllViews", stats.getAllViews().wrap(() -> {
+                    .run("getAllViews", stats.getGetAllViews().wrap(() -> {
                         try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
                             String filter = HIVE_FILTER_FIELD_PARAMS + PRESTO_VIEW_FLAG + " = \"true\"";
                             return Optional.of(client.getTableNamesByFilter(databaseName, filter));
@@ -224,6 +227,81 @@ public class ThriftHiveMetastore
         }
         catch (UnknownDBException e) {
             return Optional.empty();
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw Throwables.propagate(e);
+        }
+    }
+
+    @Override
+    public void createDatabase(Database database)
+    {
+        try {
+            retry()
+                    .stopOn(AlreadyExistsException.class, InvalidObjectException.class, MetaException.class)
+                    .stopOnIllegalExceptions()
+                    .run("createDatabase", stats.getCreateDatabase().wrap(() -> {
+                        try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
+                            client.createDatabase(database);
+                        }
+                        return null;
+                    }));
+        }
+        catch (AlreadyExistsException e) {
+            throw new SchemaAlreadyExistsException(database.getName());
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw Throwables.propagate(e);
+        }
+    }
+
+    @Override
+    public void dropDatabase(String databaseName)
+    {
+        try {
+            retry()
+                    .stopOn(NoSuchObjectException.class, InvalidOperationException.class)
+                    .stopOnIllegalExceptions()
+                    .run("dropDatabase", stats.getDropDatabase().wrap(() -> {
+                        try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
+                            client.dropDatabase(databaseName, false, false);
+                        }
+                        return null;
+                    }));
+        }
+        catch (NoSuchObjectException e) {
+            throw new SchemaNotFoundException(databaseName);
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw Throwables.propagate(e);
+        }
+    }
+
+    @Override
+    public void alterDatabase(String databaseName, Database database)
+    {
+        try {
+            retry()
+                    .stopOn(NoSuchObjectException.class, MetaException.class)
+                    .stopOnIllegalExceptions()
+                    .run("alterDatabase", stats.getAlterDatabase().wrap(() -> {
+                        try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
+                            client.alterDatabase(databaseName, database);
+                        }
+                        return null;
+                    }));
+        }
+        catch (NoSuchObjectException e) {
+            throw new SchemaNotFoundException(databaseName);
         }
         catch (TException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);
@@ -262,7 +340,7 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public void dropTable(String databaseName, String tableName)
+    public void dropTable(String databaseName, String tableName, boolean deleteData)
     {
         try {
             retry()
@@ -270,7 +348,7 @@ public class ThriftHiveMetastore
                     .stopOnIllegalExceptions()
                     .run("dropTable", stats.getDropTable().wrap(() -> {
                         try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
-                            client.dropTable(databaseName, tableName, true);
+                            client.dropTable(databaseName, tableName, deleteData);
                         }
                         return null;
                     }));
@@ -393,8 +471,7 @@ public class ThriftHiveMetastore
                     }));
         }
         catch (AlreadyExistsException e) {
-            // todo partition already exists exception
-            throw new TableNotFoundException(new SchemaTableName(databaseName, tableName));
+            throw new PartitionAlreadyExistsException(new SchemaTableName(databaseName, tableName), Optional.empty());
         }
         catch (NoSuchObjectException e) {
             throw new TableNotFoundException(new SchemaTableName(databaseName, tableName));
@@ -408,7 +485,7 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public void dropPartition(String databaseName, String tableName, List<String> parts)
+    public void dropPartition(String databaseName, String tableName, List<String> parts, boolean deleteData)
     {
         try {
             retry()
@@ -416,13 +493,13 @@ public class ThriftHiveMetastore
                     .stopOnIllegalExceptions()
                     .run("dropPartition", stats.getDropPartition().wrap(() -> {
                         try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
-                            client.dropPartition(databaseName, tableName, parts, true);
+                            client.dropPartition(databaseName, tableName, parts, deleteData);
                         }
                         return null;
                     }));
         }
         catch (NoSuchObjectException e) {
-            throw new TableNotFoundException(new SchemaTableName(databaseName, tableName));
+            throw new PartitionNotFoundException(new SchemaTableName(databaseName, tableName), parts);
         }
         catch (TException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);
@@ -433,24 +510,21 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public void dropPartitionByName(String databaseName, String tableName, String partitionName)
+    public void alterPartition(String databaseName, String tableName, Partition partition)
     {
         try {
             retry()
                     .stopOn(NoSuchObjectException.class, MetaException.class)
                     .stopOnIllegalExceptions()
-                    .run("dropPartitionByName", stats.getDropPartitionByName().wrap(() -> {
+                    .run("alterPartition", stats.getAlterPartition().wrap(() -> {
                         try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
-                            // It is observed that: (examples below assumes a table with one partition column `ds`)
-                            //  * When a partition doesn't exist (e.g. ds=2015-09-99), this thrift call is a no-op. It doesn't throw any exception.
-                            //  * When a typo exists in partition column name (e.g. dxs=2015-09-01), this thrift call will delete ds=2015-09-01.
-                            client.dropPartitionByName(databaseName, tableName, partitionName, true);
+                            client.alterPartition(databaseName, tableName, partition);
                         }
                         return null;
                     }));
         }
         catch (NoSuchObjectException e) {
-            throw new TableNotFoundException(new SchemaTableName(databaseName, tableName));
+            throw new PartitionNotFoundException(new SchemaTableName(databaseName, tableName), partition.getValues());
         }
         catch (TException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);
@@ -461,16 +535,16 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public Optional<Partition> getPartition(String databaseName, String tableName, String partitionName)
+    public Optional<Partition> getPartition(String databaseName, String tableName, List<String> partitionValues)
     {
-        requireNonNull(partitionName, "partitionName is null");
+        requireNonNull(partitionValues, "partitionValues is null");
         try {
             return retry()
                     .stopOn(NoSuchObjectException.class)
                     .stopOnIllegalExceptions()
-                    .run("getPartitionsByNames", stats.getGetPartitionByName().wrap(() -> {
+                    .run("getPartition", stats.getGetPartition().wrap(() -> {
                         try (HiveMetastoreClient client = clientProvider.createMetastoreClient()) {
-                            return Optional.of(client.getPartitionByName(databaseName, tableName, partitionName));
+                            return Optional.of(client.getPartition(databaseName, tableName, partitionValues));
                         }
                     }));
         }
@@ -663,8 +737,11 @@ public class ThriftHiveMetastore
                                 if (userPrivileges != null) {
                                     privileges.addAll(toGrants(userPrivileges.get(user)));
                                 }
-                                for (List<PrivilegeGrantInfo> rolePrivileges : privilegeSet.getRolePrivileges().values()) {
-                                    privileges.addAll(toGrants(rolePrivileges));
+                                Map<String, List<PrivilegeGrantInfo>> rolePrivilegesMap = privilegeSet.getRolePrivileges();
+                                if (rolePrivilegesMap != null) {
+                                    for (List<PrivilegeGrantInfo> rolePrivileges : rolePrivilegesMap.values()) {
+                                        privileges.addAll(toGrants(rolePrivileges));
+                                    }
                                 }
                                 // We do not add the group permissions as Hive does not seem to process these
                             }
@@ -679,19 +756,6 @@ public class ThriftHiveMetastore
         catch (Exception e) {
             throw propagate(e);
         }
-    }
-
-    private static Set<HivePrivilegeInfo> toGrants(List<PrivilegeGrantInfo> userGrants)
-    {
-        if (userGrants == null) {
-            return ImmutableSet.of();
-        }
-
-        ImmutableSet.Builder<HivePrivilegeInfo> privileges = ImmutableSet.builder();
-        for (PrivilegeGrantInfo userGrant : userGrants) {
-            privileges.addAll(parsePrivilege(userGrant));
-        }
-        return privileges.build();
     }
 
     private RetryDriver retry()
